@@ -260,7 +260,12 @@ function handleAgendamento(e) {
     
     // Verificar conflitos
     if (verificarConflitos(agendamento)) {
-        mostrarAlerta('Já existe um agendamento para este horário, escola e data!', 'danger');
+        const escolasComMultiplosAgendamentos = ['EM PINGO DE GENTE', 'EM NILMA GLÓRIA'];
+        if (escolasComMultiplosAgendamentos.includes(agendamento.escolaNome)) {
+            mostrarAlerta('Esta escola já possui 2 agendamentos para este horário, data e escola! Limite máximo atingido.', 'danger');
+        } else {
+            mostrarAlerta('Já existe um agendamento para este horário, escola e data!', 'danger');
+        }
         return;
     }
     
@@ -382,14 +387,33 @@ function coletarDadosFormulario() {
 }
 
 function verificarConflitos(novoAgendamento) {
-    return agendamentos.some(agendamento => 
-        agendamento.escola === novoAgendamento.escola &&
-        agendamento.dataAula === novoAgendamento.dataAula &&
-        agendamento.status !== 'cancelado' &&
-        agendamento.horarios.some(
-            horario => novoAgendamento.horarios.includes(horario)
-        )
-    );
+    const escolasComMultiplosAgendamentos = ['EM PINGO DE GENTE', 'EM NILMA GLÓRIA'];
+
+    // Se a escola do novo agendamento estiver na lista de exceção, permitir múltiplos agendamentos
+    if (escolasComMultiplosAgendamentos.includes(novoAgendamento.escolaNome)) {
+        // Contar quantos agendamentos existem para o mesmo horário, data e escola
+        let count = 0;
+        agendamentos.forEach(agendamento => {
+            if (agendamento.escola === novoAgendamento.escola &&
+                agendamento.dataAula === novoAgendamento.dataAula &&
+                agendamento.status !== 'cancelado' &&
+                agendamento.horarios.some(horario => novoAgendamento.horarios.includes(horario))) {
+                count++;
+            }
+        });
+        // Permitir até 2 agendamentos para estas escolas
+        return count >= 2;
+    } else {
+        // Para outras escolas, manter a verificação de conflito original (apenas 1 agendamento por horário)
+        return agendamentos.some(agendamento =>
+            agendamento.escola === novoAgendamento.escola &&
+            agendamento.dataAula === novoAgendamento.dataAula &&
+            agendamento.status !== 'cancelado' &&
+            agendamento.horarios.some(
+                horario => novoAgendamento.horarios.includes(horario)
+            )
+        );
+    }
 }
 
 function verificarDisponibilidade() {
@@ -477,16 +501,49 @@ function obterHorariosPorTurno(turno) {
             { aula: '4ª Aula' },
             { aula: '5ª Aula' }
         ];
+ function verificarHorarioOcupado(escola, data, horario) {
+    const escolasComMultiplosAgendamentos = ["EM PINGO DE GENTE", "EM NILMA GLÓRIA"];
+    const escolaNome = document.getElementById("escola").selectedOptions[0].text;
+
+    let count = 0;
+    agendamentos.forEach(agendamento => {
+        if (agendamento.escola === escola &&
+            agendamento.dataAula === data &&
+            agendamento.status !== 'cancelado' &&
+            agendamento.horarios.includes(horario)) {
+            count++;
+        }
+    });
+
+    if (escolasComMultiplosAgendamentos.includes(escolaNome)) {
+        return count >= 2 ? { professor: `Ocupado (${count}/2)` } : null;
+    } else {
+        return count >= 1 ? { professor: `Ocupado (${count}/1)` } : null;
     }
 }
+    const escolasComMultiplosAgendamentos = ["EM PINGO DE GENTE", "EM NILMA GLÓRIA"];
+    const escolaNome = document.getElementById("escola").selectedOptions[0].text;
 
-function verificarHorarioOcupado(escola, data, horario) {
-    return agendamentos.find(agendamento => 
-        agendamento.escola === escola &&
-        agendamento.dataAula === data &&
-        agendamento.horarios && 
-        agendamento.horarios.includes(horario) &&
-        agendamento.status !== 'cancelado'
+    if (escolasComMultiplosAgendamentos.includes(escolaNome)) {
+        // Para escolas com múltiplos agendamentos, verificar se já existem 2 agendamentos para o mesmo horário
+        let count = 0;
+        agendamentos.forEach(agendamento => {
+            if (agendamento.escola === escola &&
+                agendamento.dataAula === data &&
+                agendamento.status !== 'cancelado' &&
+                agendamento.horarios.includes(horario)) {
+                count++;
+            }
+        });
+        return count >= 2;
+    } else {
+        // Para outras escolas, manter a verificação de conflito o    );
+    }
+}    );
+    }
+}     );
+    }
+}endamento.status !== 'cancelado'
     );
 }
 
@@ -1178,4 +1235,3 @@ function exibirRankingAgendamentos(ranking) {
     
     container.innerHTML = html;
 }
-
