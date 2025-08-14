@@ -1235,3 +1235,27 @@ function exibirRankingAgendamentos(ranking) {
     
     container.innerHTML = html;
 }
+
+
+
+function showAuthModal() {
+    const authModal = document.getElementById("authModal");
+    if (authModal) {
+        authModal.classList.add("active");
+    }
+}
+
+function hideAuthModal() {
+    const authModal = document.getElementById("authModal");
+    if (authModal) {
+        authModal.classList.remove("active");
+    }
+}
+
+
+
+
+window.showAuthModal = showAuthModal;
+window.hideAuthModal = hideAuthModal;
+
+
