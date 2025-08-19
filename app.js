@@ -15,8 +15,12 @@ const GOOGLE_SHEETS_CONFIG = {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Sistema iniciado!');
     
-    // Carregar dados existentes
+    // Carregar dados existentes e migrar para formato normalizado
     let usuarios = JSON.parse(localStorage.getItem('usuarios-sistema')) || [];
+    if (Array.isArray(usuarios) && usuarios.length > 0) {
+        usuarios = migrarUsuariosNormalizados(usuarios);
+        localStorage.setItem('usuarios-sistema', JSON.stringify(usuarios));
+    }
     console.log('Usuários carregados:', usuarios.length);
     
     // Carregar agendamentos existentes
@@ -28,17 +32,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Verificar sessão ativa
     verificarSessaoAtiva();
     
-    // Configurar data mínima
+    // Configurar data mínima (hoje em horário local)
     const dataField = document.getElementById('data-aula');
     if (dataField) {
-        const hoje = new Date();
-        dataField.min = hoje.toISOString().split('T')[0];
-        dataField.value = hoje.toISOString().split('T')[0];
+        const hojeStr = getLocalISODate();
+        dataField.min = hojeStr;
+        if (!dataField.value) dataField.value = hojeStr;
     }
     
 
 
 });
+
+// Retorna data em formato YYYY-MM-DD usando horário local
+function getLocalISODate(date = new Date()) {
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return local.toISOString().split('T')[0];
+}
 
 function setupEventListeners() {
     // Formulário de agendamento
@@ -53,27 +63,38 @@ function setupEventListeners() {
         notebookDanificadoForm.addEventListener("submit", handleNotebookDanificado);
     }
     
-    // Formulário de login
+    // Formulário de login (evitar duplo bind se já houver onsubmit inline)
     const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
+    if (loginForm && !loginForm.getAttribute('onsubmit')) {
         loginForm.addEventListener('submit', handleLogin);
     }
     
-    // Formulário de cadastro
+    // Formulário de cadastro (evitar duplo bind se já houver onsubmit inline)
     const cadastroForm = document.getElementById('cadastroForm');
-    if (cadastroForm) {
+    if (cadastroForm && !cadastroForm.getAttribute('onsubmit')) {
         cadastroForm.addEventListener('submit', handleCadastro);
     }
     
-    // Fechar modal clicando fora
+    // Removido: fechar modal ao clicar fora (evita fechamento acidental durante a digitação)
     const authModal = document.getElementById('authModal');
     if (authModal) {
         authModal.addEventListener('click', function(e) {
-            if (e.target === this) {
-                hideAuthModal();
-            }
+            // Não fecha ao clicar no backdrop
         });
     }
+}
+
+// Normaliza e deduplica usuários por e-mail (lowercase/trim) e aparar senha
+function migrarUsuariosNormalizados(lista) {
+    const emailToUser = {};
+    lista.forEach((u) => {
+        const emailNorm = (u.email || '').toString().trim().toLowerCase();
+        const senhaNorm = (u.senha || '').toString().trim();
+        const usuarioNorm = { ...u, email: emailNorm, senha: senhaNorm };
+        // Mantém o último registro em caso de duplicidade por e-mail
+        emailToUser[emailNorm] = usuarioNorm;
+    });
+    return Object.values(emailToUser);
 }
 
 function verificarSessaoAtiva() {
@@ -82,12 +103,15 @@ function verificarSessaoAtiva() {
         try {
             const dadosSessao = JSON.parse(sessaoAtiva);
             const agora = new Date().getTime();
-            
-            // Sessão válida por 24 horas
-            if (agora - dadosSessao.timestamp < 24 * 60 * 60 * 1000) {
+            const validadePadrao = 24 * 60 * 60 * 1000; // 24h
+            const validadeMs = typeof dadosSessao.durationMs === 'number' ? dadosSessao.durationMs : validadePadrao;
+
+            if (agora - dadosSessao.timestamp < validadeMs) {
                 currentUser = dadosSessao.usuario;
                 isSignedIn = true;
                 atualizarInterfaceLogin();
+                // Garantir que o modal esteja fechado ao restaurar a sessão
+                try { hideAuthModal(); } catch (_) {}
                 console.log('Sessão ativa encontrada:', currentUser.nome);
                 return;
             } else {
@@ -106,8 +130,8 @@ function verificarSessaoAtiva() {
 function handleLogin(e) {
     e.preventDefault();
     
-    const email = document.getElementById('loginEmail').value.trim();
-    const senha = document.getElementById('loginSenha').value;
+    const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+    const senha = document.getElementById('loginSenha').value.trim();
     
     console.log('Tentativa de login:', email);
     
@@ -117,8 +141,8 @@ function handleLogin(e) {
     }
     
     // Buscar usuário
-    const usuarios = JSON.parse(localStorage.getItem('usuarios-sistema')) || [];
-    const usuario = usuarios.find(u => u.email === email && u.senha === senha);
+    const usuarios = migrarUsuariosNormalizados(JSON.parse(localStorage.getItem('usuarios-sistema')) || []);
+    const usuario = usuarios.find(u => (u.email || '').toLowerCase() === email && (u.senha || '').toString().trim() === senha);
     
     if (usuario) {
         console.log('Login bem-sucedido:', usuario.nome);
@@ -134,15 +158,24 @@ function handleLogin(e) {
         };
         isSignedIn = true;
         
-        // Salvar sessão
+        // Fechar modal imediatamente (antes de atualizar UI)
+        try { hideAuthModal(); } catch (_) {}
+
+        // Salvar sessão (24h padrão ou 30 dias se marcar "manter conectado")
+        const manterConectadoEl = document.getElementById('manterConectado');
+        const manterConectado = manterConectadoEl ? manterConectadoEl.checked : false;
+        const durationMs = manterConectado ? (30 * 24 * 60 * 60 * 1000) : (24 * 60 * 60 * 1000);
         localStorage.setItem('sessao-ativa', JSON.stringify({
             usuario: currentUser,
-            timestamp: new Date().getTime()
+            timestamp: Date.now(),
+            durationMs: durationMs,
+            lembrar: manterConectado
         }));
         
         // Atualizar interface
         atualizarInterfaceLogin();
-        hideAuthModal();
+        // Garantir fechamento após ciclo de render (fallback)
+        setTimeout(() => { try { hideAuthModal(); } catch (_) {} }, 50);
         mostrarAlerta(`✅ Bem-vindo(a), ${currentUser.nome}!`, 'success');
         
         // Preencher nome do professor se aplicável
@@ -155,7 +188,12 @@ function handleLogin(e) {
         
     } else {
         console.log('Login falhou para:', email);
-        mostrarAlerta('❌ E-mail ou senha incorretos!', 'danger');
+        const usuarioPorEmail = usuarios.find(u => (u.email || '').toLowerCase() === email);
+        if (usuarioPorEmail) {
+            mostrarAlerta('❌ Senha incorreta para este e-mail.', 'danger');
+        } else {
+            mostrarAlerta('❌ E-mail não cadastrado.', 'danger');
+        }
     }
 }
 
@@ -163,9 +201,9 @@ function handleCadastro(e) {
     e.preventDefault();
     
     const nome = document.getElementById('cadastroNome').value.trim();
-    const email = document.getElementById('cadastroEmail').value.trim();
-    const senha = document.getElementById('cadastroSenha').value;
-    const senhaConfirm = document.getElementById('cadastroConfirmarSenha').value;
+    const email = document.getElementById('cadastroEmail').value.trim().toLowerCase();
+    const senha = document.getElementById('cadastroSenha').value.trim();
+    const senhaConfirm = document.getElementById('cadastroConfirmarSenha').value.trim();
     const profileType = document.getElementById('cadastroTipo').value;
     
     console.log('Tentativa de cadastro:', email);
@@ -187,8 +225,8 @@ function handleCadastro(e) {
     }
     
     // Verificar se email já existe
-    const usuarios = JSON.parse(localStorage.getItem('usuarios-sistema')) || [];
-    if (usuarios.find(u => u.email === email)) {
+    let usuarios = migrarUsuariosNormalizados(JSON.parse(localStorage.getItem('usuarios-sistema')) || []);
+    if (usuarios.find(u => (u.email || '').toLowerCase() === email)) {
         mostrarAlerta('❌ Este e-mail já está cadastrado!', 'danger');
         return;
     }
@@ -199,6 +237,10 @@ function handleCadastro(e) {
         escolasSelecionadas = getEscolasSelecionadas();
         if (escolasSelecionadas.length === 0) {
             mostrarAlerta('Por favor, selecione pelo menos uma escola!', 'warning');
+            return;
+        }
+        if (profileType === 'tecnico' && escolasSelecionadas.length !== 1) {
+            mostrarAlerta('Técnico deve selecionar exatamente uma escola!', 'warning');
             return;
         }
     }
@@ -217,6 +259,7 @@ function handleCadastro(e) {
     };
     
     usuarios.push(novoUsuario);
+    usuarios = migrarUsuariosNormalizados(usuarios);
     localStorage.setItem('usuarios-sistema', JSON.stringify(usuarios));
     
     console.log('Usuário cadastrado e aprovado automaticamente:', novoUsuario.nome);
@@ -231,9 +274,12 @@ function handleCadastro(e) {
     };
     isSignedIn = true;
     
+    // Após cadastro, criar sessão padrão (24h) sem manter conectado por 30 dias
     localStorage.setItem("sessao-ativa", JSON.stringify({
         usuario: currentUser,
-        timestamp: new Date().getTime()
+        timestamp: Date.now(),
+        durationMs: 24 * 60 * 60 * 1000,
+        lembrar: false
     }));
     
     atualizarInterfaceLogin();
@@ -260,9 +306,25 @@ function handleAgendamento(e) {
     
     // Verificar conflitos
     if (verificarConflitos(agendamento)) {
-        const escolasComMultiplosAgendamentos = ['EM PINGO DE GENTE', 'EM NILMA GLÓRIA'];
-        if (escolasComMultiplosAgendamentos.includes(agendamento.escolaNome)) {
-            mostrarAlerta('Esta escola já possui 2 agendamentos para este horário, data e escola! Limite máximo atingido.', 'danger');
+        const escolasComMultiplosAgendamentos = ['pingo-gente', 'nilma-gloria'];
+        if (escolasComMultiplosAgendamentos.includes(agendamento.escola)) {
+            // Checar se o conflito foi por mesmo professor
+            const mesmoProfessor = agendamentos.some(ag =>
+                ag.escola === agendamento.escola &&
+                ag.dataAula === agendamento.dataAula &&
+                ag.status !== 'cancelado' &&
+                Array.isArray(ag.horarios) &&
+                ag.horarios.some(h => agendamento.horarios.includes(h)) &&
+                (
+                    (ag.usuarioId && currentUser && ag.usuarioId === currentUser.id) ||
+                    (ag.professor && agendamento.professor && ag.professor.trim().toLowerCase() === agendamento.professor.trim().toLowerCase())
+                )
+            );
+            if (mesmoProfessor) {
+                mostrarAlerta('Nesta escola, o mesmo professor não pode agendar duas vezes o mesmo horário.', 'danger');
+            } else {
+                mostrarAlerta('Esta escola já possui 2 agendamentos para este horário, data e escola! Limite máximo atingido.', 'danger');
+            }
         } else {
             mostrarAlerta('Já existe um agendamento para este horário, escola e data!', 'danger');
         }
@@ -344,6 +406,14 @@ function validarFormulario() {
         }
     }
 
+    // Data não pode ser no passado
+    const dataSelecionada = document.getElementById('data-aula')?.value;
+    const hojeStr = getLocalISODate();
+    if (dataSelecionada && dataSelecionada < hojeStr) {
+        mostrarAlerta('A data da aula não pode ser no passado. Selecione a partir de hoje.', 'warning');
+        return false;
+    }
+
     const horariosSelecionados = document.querySelectorAll('input[name="horarios"]:checked');
     if (horariosSelecionados.length === 0) {
         mostrarAlerta('Por favor, selecione pelo menos um horário!', 'warning');
@@ -387,32 +457,29 @@ function coletarDadosFormulario() {
 }
 
 function verificarConflitos(novoAgendamento) {
-    const escolasComMultiplosAgendamentos = ['EM PINGO DE GENTE', 'EM NILMA GLÓRIA'];
+    const escolasComMultiplosAgendamentos = ['pingo-gente', 'nilma-gloria'];
 
-    // Se a escola do novo agendamento estiver na lista de exceção, permitir múltiplos agendamentos
-    if (escolasComMultiplosAgendamentos.includes(novoAgendamento.escolaNome)) {
-        // Contar quantos agendamentos existem para o mesmo horário, data e escola
-        let count = 0;
-        agendamentos.forEach(agendamento => {
-            if (agendamento.escola === novoAgendamento.escola &&
-                agendamento.dataAula === novoAgendamento.dataAula &&
-                agendamento.status !== 'cancelado' &&
-                agendamento.horarios.some(horario => novoAgendamento.horarios.includes(horario))) {
-                count++;
-            }
-        });
-        // Permitir até 2 agendamentos para estas escolas
-        return count >= 2;
-    } else {
-        // Para outras escolas, manter a verificação de conflito original (apenas 1 agendamento por horário)
-        return agendamentos.some(agendamento =>
-            agendamento.escola === novoAgendamento.escola &&
-            agendamento.dataAula === novoAgendamento.dataAula &&
-            agendamento.status !== 'cancelado' &&
-            agendamento.horarios.some(
-                horario => novoAgendamento.horarios.includes(horario)
-            )
+    const coincidentes = agendamentos.filter(agendamento =>
+        agendamento.escola === novoAgendamento.escola &&
+        agendamento.dataAula === novoAgendamento.dataAula &&
+        agendamento.status !== 'cancelado' &&
+        Array.isArray(agendamento.horarios) &&
+        agendamento.horarios.some(horario => novoAgendamento.horarios.includes(horario))
+    );
+
+    if (escolasComMultiplosAgendamentos.includes(novoAgendamento.escola)) {
+        // Bloquear se for o mesmo professor
+        const existeMesmoProfessor = coincidentes.some(ag =>
+            (ag.usuarioId && currentUser && ag.usuarioId === currentUser.id) ||
+            (ag.professor && novoAgendamento.professor && ag.professor.trim().toLowerCase() === novoAgendamento.professor.trim().toLowerCase())
         );
+        if (existeMesmoProfessor) return true;
+
+        // Caso não seja o mesmo professor, permitir até 2 no total
+        return coincidentes.length >= 2;
+    } else {
+        // Outras escolas: apenas 1 agendamento por horário
+        return coincidentes.length >= 1;
     }
 }
 
@@ -434,6 +501,14 @@ function atualizarHorarios() {
     
     if (!turno || !escola || !data) {
         container.style.display = 'none';
+        return;
+    }
+
+    // Bloquear grid para datas passadas
+    const hojeStr = getLocalISODate();
+    if (data < hojeStr) {
+        container.style.display = 'none';
+        mostrarAlerta('Selecione uma data a partir de hoje para visualizar horários.', 'warning');
         return;
     }
 
@@ -485,66 +560,49 @@ function atualizarHorarios() {
 }
 
 function obterHorariosPorTurno(turno) {
-    if (turno === 'matutino') {
-        return [
-            { aula: '1ª Aula' },
-            { aula: '2ª Aula' },
-            { aula: '3ª Aula' },
-            { aula: '4ª Aula' },
-            { aula: '5ª Aula' }
-        ];
-    } else {
-        return [
-            { aula: '1ª Aula' },
-            { aula: '2ª Aula' },
-            { aula: '3ª Aula' },
-            { aula: '4ª Aula' },
-            { aula: '5ª Aula' }
-        ];
- function verificarHorarioOcupado(escola, data, horario) {
-    const escolasComMultiplosAgendamentos = ["EM PINGO DE GENTE", "EM NILMA GLÓRIA"];
-    const escolaNome = document.getElementById("escola").selectedOptions[0].text;
-
-    let count = 0;
-    agendamentos.forEach(agendamento => {
-        if (agendamento.escola === escola &&
-            agendamento.dataAula === data &&
-            agendamento.status !== 'cancelado' &&
-            agendamento.horarios.includes(horario)) {
-            count++;
-        }
-    });
-
-    if (escolasComMultiplosAgendamentos.includes(escolaNome)) {
-        return count >= 2 ? { professor: `Ocupado (${count}/2)` } : null;
-    } else {
-        return count >= 1 ? { professor: `Ocupado (${count}/1)` } : null;
-    }
+    return [
+        { aula: '1ª Aula' },
+        { aula: '2ª Aula' },
+        { aula: '3ª Aula' },
+        { aula: '4ª Aula' },
+        { aula: '5ª Aula' }
+    ];
 }
-    const escolasComMultiplosAgendamentos = ["EM PINGO DE GENTE", "EM NILMA GLÓRIA"];
-    const escolaNome = document.getElementById("escola").selectedOptions[0].text;
 
-    if (escolasComMultiplosAgendamentos.includes(escolaNome)) {
-        // Para escolas com múltiplos agendamentos, verificar se já existem 2 agendamentos para o mesmo horário
-        let count = 0;
-        agendamentos.forEach(agendamento => {
-            if (agendamento.escola === escola &&
-                agendamento.dataAula === data &&
-                agendamento.status !== 'cancelado' &&
-                agendamento.horarios.includes(horario)) {
-                count++;
-            }
-        });
-        return count >= 2;
-    } else {
-        // Para outras escolas, manter a verificação de conflito o    );
-    }
-}    );
-    }
-}     );
-    }
-}endamento.status !== 'cancelado'
+function verificarHorarioOcupado(escola, data, horarioId) {
+    const escolasComMultiplosAgendamentos = ['pingo-gente', 'nilma-gloria'];
+
+    const agendamentosMesmoHorario = agendamentos.filter(ag =>
+        ag.escola === escola &&
+        ag.dataAula === data &&
+        ag.status !== 'cancelado' &&
+        Array.isArray(ag.horarios) &&
+        ag.horarios.includes(horarioId)
     );
+
+    if (escolasComMultiplosAgendamentos.includes(escola)) {
+        // Bloquear seleção se o usuário atual já tiver agendado este horário
+        const mesmoUsuario = agendamentosMesmoHorario.some(a =>
+            (a.usuarioId && currentUser && a.usuarioId === currentUser.id) ||
+            (a.professor && currentUser && a.professor.trim().toLowerCase() === currentUser.nome.trim().toLowerCase())
+        );
+        if (mesmoUsuario) {
+            return { professor: 'Você já agendou este horário' };
+        }
+
+        // Bloquear quando já houver 2 agendamentos no mesmo horário
+        if (agendamentosMesmoHorario.length >= 2) {
+            const nomes = agendamentosMesmoHorario.map(a => a.professor).filter(Boolean).join(', ');
+            return { professor: nomes || `Ocupado (2/2)` };
+        }
+        return null;
+    } else {
+        // Demais escolas: bloquear a partir de 1 agendamento
+        if (agendamentosMesmoHorario.length >= 1) {
+            return { professor: agendamentosMesmoHorario[0].professor || 'Ocupado' };
+        }
+        return null;
+    }
 }
 
 function getEscolasSelecionadas() {
@@ -561,14 +619,46 @@ function toggleEscolasField() {
     } else {
         escolasGroup.style.display = 'none';
     }
+
+    aplicarRestricaoSelecaoEscolas();
+}
+
+// Restringe seleção de escolas no cadastro: técnico = exatamente 1; professor = múltiplas
+function aplicarRestricaoSelecaoEscolas() {
+    const tipo = document.getElementById('cadastroTipo').value;
+    const checkboxes = Array.from(document.querySelectorAll('input[name="escolas"]'));
+    if (checkboxes.length === 0) return;
+
+    // Reset handlers e estado
+    checkboxes.forEach(cb => {
+        cb.onchange = null;
+        cb.disabled = false;
+    });
+
+    if (tipo === 'tecnico') {
+        // Permitir marcar apenas 1
+        checkboxes.forEach(cb => {
+            cb.onchange = () => {
+                if (cb.checked) {
+                    checkboxes.forEach(outro => { if (outro !== cb) outro.checked = false; });
+                }
+            };
+        });
+    }
 }
 
 function showAuthModal() {
-    document.getElementById('authModal').classList.add('active');
+    const modal = document.getElementById('authModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    modal.style.display = 'flex';
 }
 
 function hideAuthModal() {
-    document.getElementById('authModal').classList.remove('active');
+    const modal = document.getElementById('authModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    modal.style.display = 'none';
 }
 
 function showAuthTab(tab, element) {
@@ -617,6 +707,9 @@ function showTab(tabName, element) {
         } else if (tabName === 'relatorios') {
             // Aba relatórios agora só tem filtros, sem ranking
         }
+
+        // Reaplicar filtro de escolas ao trocar de aba
+        aplicarFiltroDeEscolasNosSelects();
     }
 }
 
@@ -666,6 +759,9 @@ function atualizarInterfaceLogin() {
             if (relatoriosTab) relatoriosTab.style.display = 'none';
         }
     }
+
+    // Aplicar filtro de escolas nos selects conforme perfil
+    aplicarFiltroDeEscolasNosSelects();
 }
 
 function atualizarInterfaceLogout() {
@@ -691,6 +787,9 @@ function atualizarInterfaceLogout() {
     if (registrarNotebookTab) registrarNotebookTab.style.display = 'none';
     if (semedTab) semedTab.style.display = 'none';
     if (relatoriosTab) relatoriosTab.style.display = 'none';
+
+    // Reabilitar todos os selects de escola
+    resetFiltroEscolasNosSelects();
 }
 
 function logout() {
@@ -708,9 +807,9 @@ function limparFormulario() {
     // Configurar data mínima novamente
     const dataField = document.getElementById('data-aula');
     if (dataField) {
-        const hoje = new Date();
-        dataField.min = hoje.toISOString().split('T')[0];
-        dataField.value = hoje.toISOString().split('T')[0];
+        const hojeStr = getLocalISODate();
+        dataField.min = hojeStr;
+        dataField.value = hojeStr;
     }
 }
 
@@ -805,13 +904,22 @@ function carregarTodosAgendamentos() {
     const container = document.getElementById('agendamentosGerenciarList');
     if (!container) return;
     
-    if (agendamentos.length === 0) {
+    // Aplicar filtro: técnico vê apenas suas escolas; SEMED vê tudo; outros não acessam esta aba
+    let lista = agendamentos;
+    if (currentUser && currentUser.profileType === 'tecnico') {
+        const escolasPermitidas = currentUser.escolasSelecionadas && currentUser.escolasSelecionadas.length > 0
+            ? currentUser.escolasSelecionadas
+            : (currentUser.escolaAssociada ? [currentUser.escolaAssociada] : []);
+        lista = agendamentos.filter(ag => escolasPermitidas.includes(ag.escola));
+    }
+
+    if (lista.length === 0) {
         container.innerHTML = '<p class="alert alert-info">Nenhum agendamento encontrado.</p>';
         return;
     }
     
     let html = '';
-    agendamentos.forEach(agendamento => {
+    lista.forEach(agendamento => {
         html += `
             <div class="agendamento-item">
                 <h4>${agendamento.escolaNome}</h4>
@@ -928,9 +1036,16 @@ function salvarConfiguracoes() {
         }
         
         localStorage.setItem('usuarios-sistema', JSON.stringify(usuarios));
+        // Preservar a duração da sessão atual (lembrar) ao salvar configs
+        let sessaoAtual = {};
+        try { sessaoAtual = JSON.parse(localStorage.getItem('sessao-ativa') || '{}'); } catch (_) { sessaoAtual = {}; }
+        const durationMs = typeof sessaoAtual.durationMs === 'number' ? sessaoAtual.durationMs : (24 * 60 * 60 * 1000);
+        const lembrar = !!sessaoAtual.lembrar;
         localStorage.setItem('sessao-ativa', JSON.stringify({
             usuario: currentUser,
-            timestamp: new Date().getTime()
+            timestamp: Date.now(),
+            durationMs: durationMs,
+            lembrar: lembrar
         }));
         
         atualizarInterfaceLogin();
@@ -1101,16 +1216,27 @@ async function carregarRankingAgendamentosSEMED() {
  */
 function gerarRankingLocal() {
     const agendamentosLocais = JSON.parse(localStorage.getItem('agendamentos-sistema')) || [];
-    
+
+    // Considerar apenas o mês/ano atuais
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth(); // 0-11
+    const anoAtual = hoje.getFullYear();
+
     const contagemEscolas = {};
     const contagemProfessores = {};
-    
+
     agendamentosLocais.forEach(agendamento => {
         if (agendamento.status !== 'cancelado') {
+            const dataAulaStr = agendamento.dataAula;
+            if (!dataAulaStr) return;
+            const dataAula = new Date(dataAulaStr + 'T00:00:00');
+            if (isNaN(dataAula.getTime())) return;
+            if (dataAula.getMonth() !== mesAtual || dataAula.getFullYear() !== anoAtual) return;
+
             // Ranking por escola
             const escolaCodigo = agendamento.escola;
             const escolaNome = agendamento.escolaNome;
-            
+
             if (escolaCodigo && escolaNome) {
                 if (!contagemEscolas[escolaCodigo]) {
                     contagemEscolas[escolaCodigo] = {
@@ -1121,7 +1247,7 @@ function gerarRankingLocal() {
                 }
                 contagemEscolas[escolaCodigo].total++;
             }
-            
+
             // Ranking por professor
             const professor = agendamento.professor;
             if (professor) {
@@ -1136,20 +1262,22 @@ function gerarRankingLocal() {
             }
         }
     });
-    
+
     // Converter para arrays e ordenar
     const rankingEscolas = Object.values(contagemEscolas)
         .sort((a, b) => b.total - a.total)
         .slice(0, 10);
-    
+
+    // Professores: top 20
     const rankingProfessores = Object.values(contagemProfessores)
         .sort((a, b) => b.total - a.total)
-        .slice(0, 10);
-    
+        .slice(0, 20);
+
     return {
         rankingEscolas: rankingEscolas,
         rankingProfessores: rankingProfessores,
-        totalAgendamentos: agendamentosLocais.length
+        totalAgendamentos: Object.values(contagemProfessores).reduce((sum, p) => sum + p.total, 0),
+        periodo: new Date(anoAtual, mesAtual, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     };
 }
 
@@ -1190,7 +1318,7 @@ function exibirRankingAgendamentos(ranking) {
     
     // Ranking de Professores
     html += '<div>';
-    html += '<h4>👨‍🏫 Top Professores que Mais Agendam</h4>';
+    html += '<h4>👨‍🏫 Top 20 Professores que Mais Agendam (mês atual)</h4>';
     if (ranking.rankingProfessores.length > 0) {
         html += '<div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">';
         ranking.rankingProfessores.forEach((professor, index) => {
@@ -1214,19 +1342,18 @@ function exibirRankingAgendamentos(ranking) {
     
     html += '</div>';
     
-    // Estatísticas gerais - SEMPRE SEPARADAS DO MÊS (dados históricos completos)
+    // Estatísticas do mês atual (fechamento mensal ao final do mês)
     const dataAtual = new Date();
-    const mesAtual = dataAtual.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    
+    const mesAtual = ranking.periodo || dataAtual.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     if (ranking.totalAgendamentos) {
         html += `
             <div style="margin-top: 30px; text-align: center; background: #e3f2fd; padding: 20px; border-radius: 10px; border: 2px solid var(--primary);">
-                <h4 style="color: var(--primary); margin: 0 0 10px 0;">📈 Estatísticas Históricas Completas</h4>
+                <h4 style="color: var(--primary); margin: 0 0 10px 0;">📈 Estatísticas do mês de ${mesAtual}</h4>
                 <div style="font-size: 1.2rem; font-weight: bold; color: var(--dark);">
-                    Total Geral de Agendamentos: ${ranking.totalAgendamentos}
+                    Total de Agendamentos no mês: ${ranking.totalAgendamentos}
                 </div>
                 <div style="margin-top: 10px; font-size: 0.9rem; color: #6c757d;">
-                    <strong>Período:</strong> Todos os registros históricos (não limitado ao mês de ${mesAtual})
+                    <strong>Período:</strong> Mês corrente (classificações encerram automaticamente no último dia do mês)
                 </div>
                 ${ranking.dataGeracao ? `<div style="margin-top: 5px; font-size: 0.8rem; color: #6c757d;">Última atualização: ${new Date(ranking.dataGeracao).toLocaleString('pt-BR')}</div>` : ''}
             </div>
@@ -1235,27 +1362,4 @@ function exibirRankingAgendamentos(ranking) {
     
     container.innerHTML = html;
 }
-
-
-
-function showAuthModal() {
-    const authModal = document.getElementById("authModal");
-    if (authModal) {
-        authModal.classList.add("active");
-    }
-}
-
-function hideAuthModal() {
-    const authModal = document.getElementById("authModal");
-    if (authModal) {
-        authModal.classList.remove("active");
-    }
-}
-
-
-
-
-window.showAuthModal = showAuthModal;
-window.hideAuthModal = hideAuthModal;
-
 
