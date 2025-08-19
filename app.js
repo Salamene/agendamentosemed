@@ -16,7 +16,12 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Sistema iniciado!');
     
     // Carregar dados existentes e migrar para formato normalizado
-    let usuarios = JSON.parse(localStorage.getItem('usuarios-sistema')) || [];
+    let usuarios = [];
+    try {
+        usuarios = JSON.parse(localStorage.getItem('usuarios-sistema')) || [];
+    } catch (_) {
+        usuarios = [];
+    }
     if (Array.isArray(usuarios) && usuarios.length > 0) {
         usuarios = migrarUsuariosNormalizados(usuarios);
         localStorage.setItem('usuarios-sistema', JSON.stringify(usuarios));
@@ -105,7 +110,7 @@ function verificarSessaoAtiva() {
             const agora = new Date().getTime();
             const validadePadrao = 24 * 60 * 60 * 1000; // 24h
             const validadeMs = typeof dadosSessao.durationMs === 'number' ? dadosSessao.durationMs : validadePadrao;
-
+            
             if (agora - dadosSessao.timestamp < validadeMs) {
                 currentUser = dadosSessao.usuario;
                 isSignedIn = true;
@@ -323,7 +328,7 @@ function handleAgendamento(e) {
             if (mesmoProfessor) {
                 mostrarAlerta('Nesta escola, o mesmo professor não pode agendar duas vezes o mesmo horário.', 'danger');
             } else {
-                mostrarAlerta('Esta escola já possui 2 agendamentos para este horário, data e escola! Limite máximo atingido.', 'danger');
+            mostrarAlerta('Esta escola já possui 2 agendamentos para este horário, data e escola! Limite máximo atingido.', 'danger');
             }
         } else {
             mostrarAlerta('Já existe um agendamento para este horário, escola e data!', 'danger');
@@ -460,9 +465,9 @@ function verificarConflitos(novoAgendamento) {
     const escolasComMultiplosAgendamentos = ['pingo-gente', 'nilma-gloria'];
 
     const coincidentes = agendamentos.filter(agendamento =>
-        agendamento.escola === novoAgendamento.escola &&
-        agendamento.dataAula === novoAgendamento.dataAula &&
-        agendamento.status !== 'cancelado' &&
+            agendamento.escola === novoAgendamento.escola &&
+            agendamento.dataAula === novoAgendamento.dataAula &&
+            agendamento.status !== 'cancelado' &&
         Array.isArray(agendamento.horarios) &&
         agendamento.horarios.some(horario => novoAgendamento.horarios.includes(horario))
     );
@@ -560,13 +565,13 @@ function atualizarHorarios() {
 }
 
 function obterHorariosPorTurno(turno) {
-    return [
-        { aula: '1ª Aula' },
-        { aula: '2ª Aula' },
-        { aula: '3ª Aula' },
-        { aula: '4ª Aula' },
-        { aula: '5ª Aula' }
-    ];
+        return [
+            { aula: '1ª Aula' },
+            { aula: '2ª Aula' },
+            { aula: '3ª Aula' },
+            { aula: '4ª Aula' },
+            { aula: '5ª Aula' }
+        ];
 }
 
 function verificarHorarioOcupado(escola, data, horarioId) {
@@ -600,7 +605,7 @@ function verificarHorarioOcupado(escola, data, horarioId) {
         // Demais escolas: bloquear a partir de 1 agendamento
         if (agendamentosMesmoHorario.length >= 1) {
             return { professor: agendamentosMesmoHorario[0].professor || 'Ocupado' };
-        }
+    }
         return null;
     }
 }
@@ -694,6 +699,16 @@ function showTab(tabName, element) {
     if (tabContent) {
         tabContent.classList.add('active');
         
+        // Redirecionar usuários sem permissão
+        if (currentUser) {
+            if (currentUser.profileType === 'professor' && !['agendar', 'meus-agendamentos', 'configuracoes'].includes(tabName)) {
+                tabName = 'agendar';
+            }
+            if (currentUser.profileType === 'tecnico' && !['gerenciar-agendamentos', 'configuracoes'].includes(tabName)) {
+                tabName = 'gerenciar-agendamentos';
+            }
+        }
+        
         // Carregar dados específicos da aba
         if (tabName === 'meus-agendamentos') {
             carregarMeusAgendamentos();
@@ -735,28 +750,40 @@ function atualizarInterfaceLogin() {
     const registrarNotebookTab = document.getElementById('registrarNotebookDanificadoTab');
     const semedTab = document.getElementById('semedTab');
     const relatoriosTab = document.querySelector('.nav-tab[onclick*="relatorios"]');
+    const agendarTab = document.querySelector('.nav-tab[onclick*="agendar"]');
+    const meusAgendamentosTab = document.querySelector('.nav-tab[onclick*="meus-agendamentos"]');
+    const configuracoesTab = document.querySelector('.nav-tab[onclick*="configuracoes"]');
     
     if (currentUser) {
+        // Esconder tudo por padrão
+        if (gerenciarProfessoresTab) gerenciarProfessoresTab.style.display = 'none';
+        if (gerenciarAgendamentosTab) gerenciarAgendamentosTab.style.display = 'none';
+        if (registrarNotebookTab) registrarNotebookTab.style.display = 'none';
+        if (semedTab) semedTab.style.display = 'none';
+        if (relatoriosTab) relatoriosTab.style.display = 'none';
+        if (agendarTab) agendarTab.style.display = 'none';
+        if (meusAgendamentosTab) meusAgendamentosTab.style.display = 'none';
+        if (configuracoesTab) configuracoesTab.style.display = 'none';
+
         if (currentUser.profileType === 'semed') {
-            // SEMED vê todas as abas especiais
+            // SEMED: vê tudo
             if (gerenciarProfessoresTab) gerenciarProfessoresTab.style.display = 'block';
-            if (semedTab) semedTab.style.display = 'block';
-            if (relatoriosTab) relatoriosTab.style.display = 'block';
-        }
-        
-        if (currentUser.profileType === 'tecnico') {
-            // Técnico vê apenas gerenciar agendamentos e registrar notebook
             if (gerenciarAgendamentosTab) gerenciarAgendamentosTab.style.display = 'block';
             if (registrarNotebookTab) registrarNotebookTab.style.display = 'block';
-            // Remover acesso à aba SEMED e Relatórios
-            if (semedTab) semedTab.style.display = 'none';
-            if (relatoriosTab) relatoriosTab.style.display = 'none';
-        }
-        
-        if (currentUser.profileType === 'professor') {
-            // Professor não vê nenhuma aba especial (apenas as básicas)
-            if (semedTab) semedTab.style.display = 'none';
-            if (relatoriosTab) relatoriosTab.style.display = 'none';
+            if (semedTab) semedTab.style.display = 'block';
+            if (relatoriosTab) relatoriosTab.style.display = 'block';
+            if (agendarTab) agendarTab.style.display = 'block';
+            if (meusAgendamentosTab) meusAgendamentosTab.style.display = 'block';
+            if (configuracoesTab) configuracoesTab.style.display = 'block';
+        } else if (currentUser.profileType === 'tecnico') {
+            // Técnico: vê apenas Configurações e Gerenciar Agendamentos (da sua escola)
+            if (gerenciarAgendamentosTab) gerenciarAgendamentosTab.style.display = 'block';
+            if (configuracoesTab) configuracoesTab.style.display = 'block';
+        } else if (currentUser.profileType === 'professor') {
+            // Professor: Agendar Aula, Meus Agendamentos, Configurações
+            if (agendarTab) agendarTab.style.display = 'block';
+            if (meusAgendamentosTab) meusAgendamentosTab.style.display = 'block';
+            if (configuracoesTab) configuracoesTab.style.display = 'block';
         }
     }
 
@@ -919,6 +946,7 @@ function carregarTodosAgendamentos() {
     }
     
     let html = '';
+    const podeAprovarCancelar = currentUser && (currentUser.profileType === 'tecnico' || currentUser.profileType === 'semed');
     lista.forEach(agendamento => {
         html += `
             <div class="agendamento-item">
@@ -931,10 +959,11 @@ function carregarTodosAgendamentos() {
                 <p><strong>Horários:</strong> ${agendamento.horarios.join(', ')}</p>
                 <span class="status ${agendamento.status}">${agendamento.status.toUpperCase()}</span>
                 ${agendamento.observacoes ? `<p><strong>Observações:</strong> ${agendamento.observacoes}</p>` : ''}
+                ${podeAprovarCancelar ? `
                 <div class="agendamento-actions">
                     <button class="btn btn-success" onclick="aprovarAgendamento(${agendamento.id})">Aprovar</button>
                     <button class="btn btn-danger" onclick="cancelarAgendamento(${agendamento.id})">Cancelar</button>
-                </div>
+                </div>` : ''}
             </div>
         `;
     });
@@ -944,22 +973,66 @@ function carregarTodosAgendamentos() {
 
 function aprovarAgendamento(id) {
     const agendamento = agendamentos.find(ag => ag.id === id);
+    if (!currentUser || (currentUser.profileType !== 'tecnico' && currentUser.profileType !== 'semed')) {
+        mostrarAlerta('Apenas técnicos ou SEMED podem aprovar agendamentos.', 'danger');
+        return;
+    }
+    if (!agendamento) {
+        mostrarAlerta('Agendamento não encontrado.', 'danger');
+        return;
+    }
+    if (currentUser.profileType === 'tecnico' && !tecnicoTemPermissaoSobreAgendamento(agendamento)) {
+        mostrarAlerta('Acesso negado: você só pode gerenciar agendamentos da sua escola.', 'danger');
+        return;
+    }
     if (agendamento) {
         agendamento.status = 'aprovado';
         localStorage.setItem('agendamentos-sistema', JSON.stringify(agendamentos));
         carregarTodosAgendamentos();
         mostrarAlerta('Agendamento aprovado com sucesso!', 'success');
+        // Tentar sincronizar com Sheets
+        try {
+            if (window.SheetsIntegration && typeof window.SheetsIntegration.atualizarStatusAgendamento === 'function') {
+                window.SheetsIntegration.atualizarStatusAgendamento(id, 'aprovado');
+            }
+        } catch (_) {}
     }
 }
 
 function cancelarAgendamento(id) {
     const agendamento = agendamentos.find(ag => ag.id === id);
+    if (!currentUser || (currentUser.profileType !== 'tecnico' && currentUser.profileType !== 'semed')) {
+        mostrarAlerta('Apenas técnicos ou SEMED podem cancelar agendamentos.', 'danger');
+        return;
+    }
+    if (!agendamento) {
+        mostrarAlerta('Agendamento não encontrado.', 'danger');
+        return;
+    }
+    if (currentUser.profileType === 'tecnico' && !tecnicoTemPermissaoSobreAgendamento(agendamento)) {
+        mostrarAlerta('Acesso negado: você só pode gerenciar agendamentos da sua escola.', 'danger');
+        return;
+    }
     if (agendamento) {
         agendamento.status = 'cancelado';
         localStorage.setItem('agendamentos-sistema', JSON.stringify(agendamentos));
         carregarTodosAgendamentos();
         mostrarAlerta('Agendamento cancelado!', 'warning');
+        // Tentar sincronizar com Sheets
+        try {
+            if (window.SheetsIntegration && typeof window.SheetsIntegration.atualizarStatusAgendamento === 'function') {
+                window.SheetsIntegration.atualizarStatusAgendamento(id, 'cancelado');
+            }
+        } catch (_) {}
     }
+}
+
+function tecnicoTemPermissaoSobreAgendamento(agendamento) {
+    if (!currentUser || currentUser.profileType !== 'tecnico') return false;
+    const escolasPermitidas = currentUser.escolasSelecionadas && currentUser.escolasSelecionadas.length > 0
+        ? currentUser.escolasSelecionadas
+        : (currentUser.escolaAssociada ? [currentUser.escolaAssociada] : []);
+    return escolasPermitidas.includes(agendamento.escola);
 }
 
 function gerarRelatorio() {
@@ -1221,10 +1294,10 @@ function gerarRankingLocal() {
     const hoje = new Date();
     const mesAtual = hoje.getMonth(); // 0-11
     const anoAtual = hoje.getFullYear();
-
+    
     const contagemEscolas = {};
     const contagemProfessores = {};
-
+    
     agendamentosLocais.forEach(agendamento => {
         if (agendamento.status !== 'cancelado') {
             const dataAulaStr = agendamento.dataAula;
@@ -1236,7 +1309,7 @@ function gerarRankingLocal() {
             // Ranking por escola
             const escolaCodigo = agendamento.escola;
             const escolaNome = agendamento.escolaNome;
-
+            
             if (escolaCodigo && escolaNome) {
                 if (!contagemEscolas[escolaCodigo]) {
                     contagemEscolas[escolaCodigo] = {
@@ -1247,7 +1320,7 @@ function gerarRankingLocal() {
                 }
                 contagemEscolas[escolaCodigo].total++;
             }
-
+            
             // Ranking por professor
             const professor = agendamento.professor;
             if (professor) {
@@ -1262,17 +1335,17 @@ function gerarRankingLocal() {
             }
         }
     });
-
+    
     // Converter para arrays e ordenar
     const rankingEscolas = Object.values(contagemEscolas)
         .sort((a, b) => b.total - a.total)
         .slice(0, 10);
-
+    
     // Professores: top 20
     const rankingProfessores = Object.values(contagemProfessores)
         .sort((a, b) => b.total - a.total)
         .slice(0, 20);
-
+    
     return {
         rankingEscolas: rankingEscolas,
         rankingProfessores: rankingProfessores,
