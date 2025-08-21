@@ -224,9 +224,7 @@
             position: relative;
         }
 
-        .schedule-checkbox {
-            display: none;
-        }
+        
 
         .schedule-label {
             display: block;
@@ -243,6 +241,12 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .schedule-label.occupied {
@@ -259,9 +263,23 @@
             transform: scale(1.05);
         }
 
-        .schedule-label:hover:not(.occupied) {
+        .schedule-label:hover:not(.occupied),
+        .schedule-label:focus:not(.occupied),
+        .schedule-label:active:not(.occupied) {
             border-color: var(--primary);
             transform: translateY(-2px);
+        }
+
+        /* Melhorar touch em dispositivos móveis */
+        @media (hover: none) and (pointer: coarse) {
+            .schedule-label:hover:not(.occupied) {
+                transform: none;
+            }
+            
+            .schedule-label:active:not(.occupied) {
+                background: rgba(46, 112, 212, 0.1);
+                transform: scale(0.98);
+            }
         }
 
         .professor-input {
@@ -574,15 +592,28 @@
         }
 
         .checkbox-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
             cursor: pointer;
+            min-width: 44px;
+            min-height: 44px;
+            margin: 0;
+            padding: 12px;
+            touch-action: manipulation;
         }
 
         .checkbox-item label {
             cursor: pointer;
             font-weight: normal;
             margin: 0;
+            padding: 12px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         @media (max-width: 768px) {
@@ -635,8 +666,9 @@
 
             .schedule-label {
                 font-size: 0.7rem;
-                padding: 10px 5px;
-                min-height: 50px;
+                padding: 12px 8px;
+                min-height: 56px;
+                touch-action: manipulation;
             }
 
             .auth-modal-content {
@@ -1003,4 +1035,16 @@
 
 
 
+
+
+
+        .schedule-checkbox {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+        }
 
