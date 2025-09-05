@@ -197,8 +197,8 @@ async function handleCadastro(e) {
     const email = document.getElementById('cadastroEmail').value.trim().toLowerCase();
     const senha = document.getElementById('cadastroSenha').value.trim();
     const senhaConfirm = document.getElementById('cadastroConfirmarSenha').value.trim();
-    const profileType = document.getElementById('cadastroTipo').value; // Novo campo para tipo de perfil
-    const escolasSelecionadas = Array.from(document.querySelectorAll('input[name="cadastroEscolas"]:checked')).map(cb => cb.value); // Novo campo para escolas
+    const profileType = 'professor';
+    const escolasSelecionadas = [];
 
     console.log('Tentativa de cadastro:', email);
     
