@@ -206,7 +206,6 @@ def get_schedules():
 
 # ⭐⭐ ADICIONE ESTE CÓDIGO NO FINAL DO app.py ⭐⭐
 
-@app.before_first_request
 def create_tables():
     """Cria as tabelas automaticamente no primeiro acesso"""
     try:
