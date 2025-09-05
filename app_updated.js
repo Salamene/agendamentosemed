@@ -4,7 +4,7 @@ let currentUser = null;
 let agendamentos = [];
 
 // URL do backend
-const BACKEND_URL = 'https://5000-i1r3v76ewaewqpksld00g-2f140755.manusvm.computer';
+const BACKEND_URL = 'https://agendamentosemed.onrender.com';
 
 // Inicializar sistema
 document.addEventListener('DOMContentLoaded', function() {
