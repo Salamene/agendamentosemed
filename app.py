@@ -204,34 +204,67 @@ def get_schedules():
     return jsonify(result), 200
 
 
+# ⭐⭐ ADICIONE ESTE CÓDIGO NO FINAL DO app.py ⭐⭐
+
+@app.before_first_request
+def create_tables():
+    """Cria as tabelas automaticamente no primeiro acesso"""
+    try:
+        db.create_all()
+        print("✅ Tabelas criadas com sucesso!")
+        
+        # Verifica se precisa popular com dados iniciais
+        if not School.query.first():
+            print("📦 Populando banco com dados iniciais...")
+            
+            # Adicionar escolas
+            schools_data = ['ARMELINDO TONON', 'ÊNIO CARLOS', 'FILINTO MULLER', 'NILMA GLÓRIA', 'PINGO DE GENTE']
+            for school_name in schools_data:
+                school = School(name=school_name)
+                db.session.add(school)
+            db.session.commit()
+            
+            # Adicionar usuários de teste
+            semed_user = User(username='semed_admin', email='semed@example.com', password='semed_password', profile_type='semed')
+            db.session.add(semed_user)
+            
+            armelindo_school = School.query.filter_by(name='ARMELINDO TONON').first()
+            if armelindo_school:
+                prof_armelindo = User(username='prof_armelindo', email='prof_armelindo@example.com', password='prof_password', profile_type='professor', schools_associated=str(armelindo_school.id))
+                db.session.add(prof_armelindo)
+            
+            enio_school = School.query.filter_by(name='ÊNIO CARLOS').first()
+            if enio_school:
+                tec_enio = User(username='tec_enio', email='tec_enio@example.com', password='tec_password', profile_type='tecnico', schools_associated=str(enio_school.id))
+                db.session.add(tec_enio)
+            
+            db.session.commit()
+            print("✅ Dados iniciais populados!")
+            
+    except Exception as e:
+        print(f"❌ Erro ao criar tabelas: {e}")
+
+# ⭐⭐ OU SE PREFERIR, MAIS SIMPLES: ⭐⭐
+
+@app.before_request
+def initialize_database():
+    """Garante que as tabelas existam antes de cada request"""
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"Erro ao criar tabelas: {e}")
+
+# ⭐⭐ MANTENHA TAMBÉM A ROTA /init_db PARA USO MANUAL ⭐⭐
 @app.route('/init_db')
 def init_db():
-    db.drop_all()
-    db.create_all()
-
-    # Adicionar escolas de exemplo se não existirem
-    schools_data = ['ARMELINDO TONON', 'ÊNIO CARLOS', 'FILINTO MULLER', 'NILMA GLÓRIA', 'PINGO DE GENTE']
-    for school_name in schools_data:
-        school = School(name=school_name)
-        db.session.add(school)
-    db.session.commit()
-
-    # Adicionar usuários de teste
-    semed_user = User(username='semed_admin', email='semed@example.com', password='semed_password', profile_type='semed')
-    db.session.add(semed_user)
-
-    armelindo_school = School.query.filter_by(name='ARMELINDO TONON').first()
-    if armelindo_school:
-        prof_armelindo = User(username='prof_armelindo', email='prof_armelindo@example.com', password='prof_password', profile_type='professor', schools_associated=str(armelindo_school.id))
-        db.session.add(prof_armelindo)
-
-    enio_school = School.query.filter_by(name='ÊNIO CARLOS').first()
-    if enio_school:
-        tec_enio = User(username='tec_enio', email='tec_enio@example.com', password='tec_password', profile_type='tecnico', schools_associated=str(enio_school.id))
-        db.session.add(tec_enio)
-    db.session.commit()
-
+    # ... (seu código atual da init_db) ...
     return jsonify({'message': 'Database initialized and populated with example data'}), 200
+
+if __name__ == '__main__':
+    with app.app_context():
+        # Cria tabelas automaticamente ao iniciar
+        db.create_all()
+    app.run(debug=True, port=5000)
 
 
 if __name__ == '__main__':
