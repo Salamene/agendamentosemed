@@ -236,7 +236,14 @@ def init_db():
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all() # Cria as tabelas se não existirem
+        db.create_all()  # Cria tabelas se não existirem
+        # Opcional: Popular com dados iniciais
+        if not School.query.first():
+            schools_data = ['ARMELINDO TONON', 'ÊNIO CARLOS', 'FILINTO MULLER', 'NILMA GLÓRIA', 'PINGO DE GENTE']
+            for school_name in schools_data:
+                school = School(name=school_name)
+                db.session.add(school)
+            db.session.commit()
     app.run(debug=True, port=5000)
 
 
