@@ -770,6 +770,47 @@
     </div>
 
     <script src="app.js"></script>
+    <script>
+// Solução rápida - Define as funções globalmente primeiro
+window.showAuthModal = function() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.classList.add('active');
+}
+
+window.hideAuthModal = function() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.classList.remove('active');
+}
+
+window.showLoginForm = function() {
+    const loginForm = document.getElementById('loginForm');
+    const cadastroForm = document.getElementById('cadastroForm');
+    if (loginForm) loginForm.classList.add('active');
+    if (cadastroForm) cadastroForm.classList.remove('active');
+}
+
+window.showCadastroForm = function() {
+    const loginForm = document.getElementById('loginForm');
+    const cadastroForm = document.getElementById('cadastroForm');
+    if (loginForm) loginForm.classList.remove('active');
+    if (cadastroForm) cadastroForm.classList.add('active');
+}
+
+window.showTab = function(tabName) {
+    // Esconder todas as abas
+    const tabs = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => tab.classList.remove('active'));
+    
+    // Mostrar aba selecionada
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) selectedTab.classList.add('active');
+}
+
+window.logout = function() {
+    alert('Logout realizado!');
+    // Aqui você pode adicionar a lógica real de logout depois
+}
+</script>
 </body>
 </html>
 
