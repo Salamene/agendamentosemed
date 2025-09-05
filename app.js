@@ -648,4 +648,87 @@ document.addEventListener('DOMContentLoaded', function() {
     // showTab('agendamento'); // Isso será feito após o login
 });
 
+// 🎯 SOLUÇÃO RÁPIDA - Adiciona o event listener que estava faltando
+document.addEventListener('DOMContentLoaded', function() {
+    const cadastroForm = document.getElementById('cadastroForm');
+    if (cadastroForm) {
+        cadastroForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Use valores padrão temporários
+            const profileType = 'professor';
+            const escolasSelecionadas = [];
+            
+            // Continue com o resto do cadastro
+            handleCadastro(e, profileType, escolasSelecionadas);
+        });
+    }
+});
 
+// 🎯 Modifica a função handleCadastro para aceitar os parâmetros
+async function handleCadastro(e, profileType = 'professor', escolasSelecionadas = []) {
+    e.preventDefault();
+    
+    const nome = document.getElementById('cadastroNome').value.trim();
+    const email = document.getElementById('cadastroEmail').value.trim().toLowerCase();
+    const senha = document.getElementById('cadastroSenha').value.trim();
+    const senhaConfirm = document.getElementById('cadastroConfirmarSenha').value.trim();
+    
+    // ... o resto do código continua igual
+    if (!nome || !email || !senha || !senhaConfirm) {
+        mostrarAlerta('Por favor, preencha todos os campos!', 'warning');
+        return;
+    }
+    
+    if (senha.length < 6) {
+        mostrarAlerta('A senha deve ter pelo menos 6 caracteres!', 'warning');
+        return;
+    }
+    
+    if (senha !== senhaConfirm) {
+        mostrarAlerta('As senhas não coincidem!', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${BACKEND_URL}/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                username: nome,
+                email: email,
+                password: senha,
+                profile_type: profileType,
+                schools_associated: escolasSelecionadas.join(',')
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            console.log('Cadastro bem-sucedido:', nome);
+            mostrarAlerta('✅ Conta criada com sucesso! Faça login para continuar.', 'success');
+            
+            // Mudar para aba de login
+            const loginTab = document.querySelector('.auth-tab[onclick="showLoginForm()"]');
+            if (loginTab) {
+                loginTab.click();
+            }
+            
+            // Preencher email no formulário de login
+            const loginEmailField = document.getElementById('loginEmail');
+            if (loginEmailField) {
+                loginEmailField.value = email;
+            }
+            
+        } else {
+            console.log('Cadastro falhou:', data.message);
+            mostrarAlerta('❌ ' + data.message, 'danger');
+        }
+    } catch (error) {
+        console.error('Erro no cadastro:', error);
+        mostrarAlerta('❌ Erro de conexão com o servidor.', 'danger');
+    }
+}
